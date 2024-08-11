@@ -2,9 +2,45 @@ require 'async'
 require 'httparty'
 require 'nokogiri'
 
-class property
-  def initialize()
+class Property
+  # Automatically create getter and setter methods for all attributes
+  attr_accessor :id, :pictures, :price, :room, :living_space, :projectile,
+                :availability, :address, :further_price_information, :features,
+                :descriptions, :energy_and_building_condition, :provider
 
+  # Constructor to initialize the object with the provided attributes
+  def initialize(id, pictures, price, room, living_space, projectile,
+                 availability, address, further_price_information, features,
+                 descriptions, energy_and_building_condition, provider)
+    @id = id
+    @pictures = pictures
+    @price = price
+    @room = room
+    @living_space = living_space
+    @projectile = projectile
+    @availability = availability
+    @address = address
+    @further_price_information = further_price_information
+    @features = features
+    @descriptions = descriptions
+    @energy_and_building_condition = energy_and_building_condition
+    @provider = provider
+  end
+
+  def display_details
+    puts "ID: #{@id}"
+    puts "Pictures: #{@pictures}"
+    puts "Price: #{@price}"
+    puts "Room: #{@room}"
+    puts "Living Space: #{@living_space}"
+    puts "Projectile: #{@projectile}"
+    puts "Availability: #{@availability}"
+    puts "Address: #{@address}"
+    puts "Further Price Information: #{@further_price_information}"
+    puts "Features: #{@features}"
+    puts "Descriptions: #{@descriptions}"
+    puts "Energy and Building Condition: #{@energy_and_building_condition}"
+    puts "Provider: #{@provider}"
   end
 end
 
@@ -16,15 +52,18 @@ def main(city='landkreis-muenchen')
     links = dom.xpath('//div[contains(@class, "SearchList")]/div/a[@href]').map { |link| link['href'] }
     links.each do |link|
       task.async do
-        dom = get_dom(link)
-        fetch(dom)
+        data = fetch(link)
+        property = Property.new(*data)
+        property.display_details
       end
     end
   end
 end
 
-def fetch(dom)
-  id = links[0].scan(/\/(.{7})$/)
+def fetch(link)
+  dom = get_dom(link)
+
+  id = link.match(/.{7}$/).to_s
   pictures = dom.xpath('//div[@data-testid="aviv.CDP.Gallery.DesktopPreview"]//source').map { |picture| picture['srcset'] }
   price = dom.xpath('//span[@data-testid="aviv.CDP.Sections.Hardfacts.Price.Value"]').text
   room = dom.xpath('//span[text()="Zimmer"]/preceding-sibling::span').text
@@ -32,13 +71,13 @@ def fetch(dom)
   projectile = dom.xpath('//span[text()="Geschoss"]/preceding-sibling::span').text
   availability = dom.xpath('//span[text()="Verfügbarkeit"]/preceding-sibling::span').text
   address = dom.xpath('normalize-space(//svg[@data-testid="aviv.CDP.Sections.Location.Address.Icon"]/following-sibling::span)')
-  further_price_information = dom.xpath('//div[@data-testid="aviv.CDP.Sections.Price.NotePrice"]/following-sibling::div[1]/text()')
+  further_price_information = dom.xpath('//div[@data-testid="aviv.CDP.Sections.Price.NotePrice"]/following-sibling::div[1]').text
   features = dom.xpath('//ul[@data-testid="aviv.CDP.Sections.Features.Preview"]//div[@data-testid="aviv.CDP.Sections.Features.Feature"]/span').map { |feature| feature.text }
 
   main_description_title = dom.xpath('//h2[@data-testid="aviv.CDP.Sections.Description.MainDescription.Title"]').text
   main_description = dom.xpath('normalize-space(//div[@data-testid="aviv.CDP.Sections.Description.MainDescription.GradientTextBox-content"])')
   location_description = dom.xpath('normalize-space(//div[@data-testid="aviv.CDP.Sections.Description.LocationDescription.GradientTextBox-content"])')
-  additional_description = dom.xpath('//div[@data-testid="aviv.CDP.Sections.Description.AdditionalDescription.GradientTextBox-content"]/p/text()')
+  additional_description = dom.xpath('//div[@data-testid="aviv.CDP.Sections.Description.AdditionalDescription.GradientTextBox-content"]/p').text
 
   descriptions = {
     'main_description_title' => main_description_title,
@@ -68,6 +107,10 @@ def fetch(dom)
   if !title.empty?
     provider['title'] = title
   end
+
+  return [id, pictures, price, room, living_space, projectile, 
+  availability, address, further_price_information, features, 
+  descriptions, energy_and_building_condition, provider]
 end
 
 def get_dom(url)

@@ -72,9 +72,11 @@ def main(city='landkreis-muenchen', page=nil, start_page=1, end_page=1)
     $links = dom.xpath('//div[contains(@class, "SearchList")]/div/a[@href]').map { |link| link['href'] }
     $links.each do |link|
       task.async do
-        $logger.info "Fetching #{link}"
-        data = fetch(link)
-        property = Property.new(*data, city, link)
+        if ad_exists(link)
+          $logger.info "Fetching #{link}"
+          data = fetch(link)
+          property = Property.new(*data, city, link)
+        end
       end
     end
   end
@@ -175,8 +177,8 @@ end
 
 def ad_exists(url)
   dom = get_dom(url)
-  deleted_message = dom.xpath('//div[text()="Anzeige gelöscht"]/following-sibling::div[text()="Diese Anzeige wurde bereits gelöscht, aber es warten viele andere auf dich."]')
-  return deleted_message.empty? ? true : false
+  price = dom.xpath('//span[@data-testid="aviv.CDP.Sections.Hardfacts.Price.Value"]')
+  return price.empty? ? false : true
 end
 
 if __FILE__ == $0

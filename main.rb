@@ -1,5 +1,6 @@
 require 'async'
 require 'httparty'
+require 'logging'
 require 'nokogiri'
 
 class Property
@@ -53,13 +54,15 @@ class Property
 end
 
 def main(city='landkreis-muenchen')
-  Async do |task|  
+  Async do |task|
+    $logger.info "Scraping #{city} begins"
     url = "https://www.immowelt.de/suche/#{city}/immobilien"
     dom = get_dom(url)
 
     links = dom.xpath('//div[contains(@class, "SearchList")]/div/a[@href]').map { |link| link['href'] }
     links.each do |link|
       task.async do
+        $logger.info "Fetching #{link}"
         data = fetch(link)
         property = Property.new(*data, city, link)
       end
@@ -102,18 +105,18 @@ def fetch(link)
 
   provider = {}
 
-  intermediary_profile = dom.xpath('//div[@data-testid="aviv.CDP.Contacting.ProviderSection.IntermediaryCard.Logo"]/a[@href]').first['href']
-  years_of_partnership = dom.xpath('//div[@data-testid="aviv.CDP.Contacting.ProviderSection"]//div[contains(text(), "Partnerschaft")]').text
-  title = dom.xpath('//div[@data-testid="aviv.CDP.Contacting.ProviderSection"]//span[@data-testid="aviv.CDP.Contacting.ProviderSection.ContactCard.Title"]').text
+  intermediary_profile = dom.xpath('//div[@data-testid="aviv.CDP.Contacting.ProviderSection.IntermediaryCard.Logo"]/a[@href]')
+  years_of_partnership = dom.xpath('//div[@data-testid="aviv.CDP.Contacting.ProviderSection"]//div[contains(text(), "Partnerschaft")]')
+  title = dom.xpath('//div[@data-testid="aviv.CDP.Contacting.ProviderSection"]//span[@data-testid="aviv.CDP.Contacting.ProviderSection.ContactCard.Title"]')
 
   if !intermediary_profile.empty?
-    provider['intermediary_profile'] = intermediary_profile
+    provider['intermediary_profile'] = intermediary_profile.first['href']
   end
-  if !years_of_partnership.empty? && years_of_partnership.strip =~ /^\d+/
-    provider['years_of_partnership'] = years_of_partnership.match(/^\d+/).to_s
+  if !years_of_partnership.empty? && years_of_partnership.text.strip =~ /^\d+/
+    provider['years_of_partnership'] = years_of_partnership.text.match(/^\d+/).to_s
   end
   if !title.empty?
-    provider['title'] = title
+    provider['title'] = title.text
   end
 
   return [id, pictures, price, room, living_space, property, projectile,
@@ -135,5 +138,11 @@ def ad_exists(url)
 end
 
 if __FILE__ == $0
+  $logger = Logging.logger['scraper_logger']
+  $logger.level = :info
+  $logger.add_appenders \
+    Logging.appenders.stdout,
+    Logging.appenders.file('logs.log')
+
   main()
 end

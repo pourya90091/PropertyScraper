@@ -61,14 +61,16 @@ class Property
   end
 end
 
-def main(city='landkreis-muenchen')
+def main(city='landkreis-muenchen', page=nil, start_page=1, end_page=1)
+  page = !page ? start_page : page
+
   Async do |task|
-    $logger.info "Scraping #{city} begins"
-    url = "https://www.immowelt.de/suche/#{city}/immobilien"
+    $logger.info "Scraping #{city} begins (page #{page})"
+    url = "https://www.immowelt.de/suche/#{city}/immobilien/mk?sp=#{page}"
     dom = get_dom(url)
 
-    links = dom.xpath('//div[contains(@class, "SearchList")]/div/a[@href]').map { |link| link['href'] }
-    links.each do |link|
+    $links = dom.xpath('//div[contains(@class, "SearchList")]/div/a[@href]').map { |link| link['href'] }
+    $links.each do |link|
       task.async do
         $logger.info "Fetching #{link}"
         data = fetch(link)
@@ -76,6 +78,12 @@ def main(city='landkreis-muenchen')
       end
     end
   end
+  if $links.length < 1 || page == end_page
+    $logger.info "#{city} Scraped completely"
+    return 0
+  end
+
+  main(city, page += 1)
 end
 
 def fetch(link)

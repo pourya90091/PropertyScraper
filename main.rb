@@ -74,8 +74,12 @@ def main(city='landkreis-muenchen', page=nil, start_page=1, end_page=1)
       task.async do
         if ad_exists(link)
           $logger.info "Fetching #{link}"
-          data = fetch(link)
-          property = Property.new(*data, city, link)
+          begin
+            data = fetch(link)
+            property = Property.new(*data, city, link)
+          rescue
+            $logger.error "Error occurred during fetching #{link}"
+          end
         end
       end
     end

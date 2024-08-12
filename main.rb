@@ -118,7 +118,11 @@ def fetch(link)
   additional_prices = {}
   all_prices = dom.xpath('//div[@data-testid="aviv.CDP.Sections.Price.AdditionalPrice"]/div')
   all_prices.each do |price|
-    additional_prices[price.xpath('normalize-space(./div[1])')] = price.xpath('normalize-space(./div[2])')
+    if price['class'] == 'css-1fobf8d'
+      additional_prices[price.xpath('./descendant::div[text()][2]').text] = price.xpath('./descendant::span[1]').text
+    else
+      additional_prices[price.xpath('normalize-space(./div[1])')] = price.xpath('normalize-space(./div[2])')
+    end
   end
 
   further_price_information = dom.xpath('//div[@data-testid="aviv.CDP.Sections.Price.NotePrice"]/following-sibling::div[1]/text()').map { |text| text.text }

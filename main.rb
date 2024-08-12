@@ -4,19 +4,20 @@ require 'nokogiri'
 
 class Property
   # Automatically create getter and setter methods for all attributes
-  attr_accessor :id, :pictures, :price, :room, :living_space, :projectile,
+  attr_accessor :id, :pictures, :price, :room, :living_space, :property, :projectile,
                 :availability, :address, :further_price_information, :features,
-                :descriptions, :energy_and_building_condition, :provider
+                :descriptions, :energy_and_building_condition, :provider, :city, :url
 
   # Constructor to initialize the object with the provided attributes
-  def initialize(id, pictures, price, room, living_space, projectile,
+  def initialize(id, pictures, price, room, living_space, property, projectile,
                  availability, address, further_price_information, features,
-                 descriptions, energy_and_building_condition, provider)
+                 descriptions, energy_and_building_condition, provider, city, url)
     @id = id
     @pictures = pictures
     @price = price
     @room = room
     @living_space = living_space
+    @property = property
     @projectile = projectile
     @availability = availability
     @address = address
@@ -25,22 +26,29 @@ class Property
     @descriptions = descriptions
     @energy_and_building_condition = energy_and_building_condition
     @provider = provider
+    @city = city
+    @url = url
   end
 
-  def display_details
-    puts "ID: #{@id}"
-    puts "Pictures: #{@pictures}"
-    puts "Price: #{@price}"
-    puts "Room: #{@room}"
-    puts "Living Space: #{@living_space}"
-    puts "Projectile: #{@projectile}"
-    puts "Availability: #{@availability}"
-    puts "Address: #{@address}"
-    puts "Further Price Information: #{@further_price_information}"
-    puts "Features: #{@features}"
-    puts "Descriptions: #{@descriptions}"
-    puts "Energy and Building Condition: #{@energy_and_building_condition}"
-    puts "Provider: #{@provider}"
+  def data
+    return {
+      'id' => @id,
+      'pictures' => @pictures,
+      'price' => @price,
+      'room' => @room,
+      'living_space' => @living_space,
+      'property' => @property,
+      'projectile' => @projectile,
+      'availability' => @availability,
+      'address' => @address,
+      'further_price_information' => @further_price_information,
+      'features' => @features,
+      'descriptions' => @descriptions,
+      'energy_and_building_condition' => @energy_and_building_condition,
+      'provider' => @provider,
+      'city' => @city,
+      'url' => @url
+    }
   end
 end
 
@@ -53,8 +61,7 @@ def main(city='landkreis-muenchen')
     links.each do |link|
       task.async do
         data = fetch(link)
-        property = Property.new(*data)
-        property.display_details
+        property = Property.new(*data, city, link)
       end
     end
   end
@@ -68,6 +75,7 @@ def fetch(link)
   price = dom.xpath('//span[@data-testid="aviv.CDP.Sections.Hardfacts.Price.Value"]').text
   room = dom.xpath('//span[text()="Zimmer"]/preceding-sibling::span').text
   living_space = dom.xpath('//span[text()="Wohnfläche"]/preceding-sibling::span').text
+  property = dom.xpath('//span[text()="Grundstück"]/preceding-sibling::span').text
   projectile = dom.xpath('//span[text()="Geschoss"]/preceding-sibling::span').text
   availability = dom.xpath('//span[text()="Verfügbarkeit"]/preceding-sibling::span').text
   address = dom.xpath('normalize-space(//svg[@data-testid="aviv.CDP.Sections.Location.Address.Icon"]/following-sibling::span)')
@@ -108,7 +116,7 @@ def fetch(link)
     provider['title'] = title
   end
 
-  return [id, pictures, price, room, living_space, projectile, 
+  return [id, pictures, price, room, living_space, property, projectile,
   availability, address, further_price_information, features, 
   descriptions, energy_and_building_condition, provider]
 end
@@ -117,6 +125,13 @@ def get_dom(url)
   response = HTTParty.get(url)
   dom = Nokogiri::HTML(response.body)
   return dom
+end
+
+def ad_exists(url)
+  dom = get_dom(url)
+
+  deleted_message = dom.xpath('//div[text()="Anzeige gelöscht"]/following-sibling::div[text()="Diese Anzeige wurde bereits gelöscht, aber es warten viele andere auf dich."]')
+  return deleted_message.empty? ? true : false
 end
 
 if __FILE__ == $0

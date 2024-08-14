@@ -195,7 +195,7 @@ def fetch_pictures(link)
   pictures_hashmap = nil
   Async do
     Playwright.create(playwright_cli_executable_path: './node_modules/.bin/playwright') do |playwright|
-      playwright.chromium.launch(headless: false) do |browser|
+      playwright.chromium.launch(headless: true) do |browser|
         page = browser.new_page
         page.goto(link)
         page.evaluate('() => document.body.style.zoom = "1%"')

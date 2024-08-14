@@ -1,8 +1,8 @@
-require 'async'
+require 'concurrent-ruby'
 require 'httparty'
 require 'logging'
 require 'nokogiri'
-require 'playwright'
+require 'ferrum'
 
 class Property
   # Automatically create getter and setter methods for all attributes
@@ -65,31 +65,32 @@ end
 def main(city='landkreis-muenchen', page=nil, start_page=1, end_page=1, fetch_pic=true)
   page = !page ? start_page : page
 
-  Async do |task|
-    $logger.info "Scraping #{city} begins (page #{page})"
-    url = "https://www.immowelt.de/suche/#{city}/immobilien/mk?sp=#{page}"
-    dom = get_dom(url)
+  $logger.info "Scraping #{city} begins (page #{page})"
+  url = "https://www.immowelt.de/suche/#{city}/immobilien/mk?sp=#{page}"
+  dom = get_dom(url)
 
-    $links = dom.xpath('//div[contains(@class, "SearchList")]/div/a[not(contains(@href, "projekte"))]').map { |link| link['href'] }
-    $links.each do |link|
-      task.async do
-        begin
-          if ad_exists(link)
-            $logger.info "Fetching #{link}"
-            data = fetch(link, fetch_pic)
-            property = Property.new(*data, city, link)
-          end
-        rescue Exception => err
-          $logger.error "Error (#{link}): #{err}"
+  $links = dom.xpath('//div[contains(@class, "SearchList")]/div/a[not(contains(@href, "projekte"))]').map { |link| link['href'] }
+  promises = $links.map do |link|
+    Concurrent::Promise.execute do
+      begin
+        if ad_exists(link)
+          $logger.info "Fetching #{link}"
+          data = fetch(link, fetch_pic)
+          property = Property.new(*data, city, link)
+          puts property.data
         end
+      rescue Exception => err
+        $logger.error "Error (#{link}): #{err}"
       end
     end
   end
+
+  # Wait for all promises to complete
+  results = promises.map(&:value)
   if $links.length < 1 || page == end_page
     $logger.info "#{city} Scraped completely"
     return 0
   end
-
   main(city, page += 1)
 end
 
@@ -100,7 +101,7 @@ def fetch(link, fetch_pic)
   brief = dom.xpath('normalize-space(//div[@data-testid="aviv.CDP.Sections.Hardfacts"]/div[1])')
   if fetch_pic
     # A hashmap that contains all pictures (titles and urls)
-    pictures = fetch_pictures(link + '#masonry-modal')
+    pictures = fetch_pictures(link)
   else
     # An Array that contains few pictures (without titles, only urls)
     pictures = dom.xpath('//div[@data-testid="aviv.CDP.Gallery.DesktopPreview"]//source').map { |picture| picture['srcset'] }
@@ -181,47 +182,47 @@ def fetch(link, fetch_pic)
 end
 
 def fetch_pictures(link)
-  def load_pictures(page, all_pictures)
-    pictures = page.query_selector_all('//picture[contains(@id, "picture")]')
-
+  def load_pictures(browser, all_pictures, retry_counter=1, max_retry=5)
+    pictures = browser.xpath('//picture[contains(@id, "picture")]')
     if pictures.length < all_pictures
-      sleep(0.5)
-      load_pictures(page, all_pictures)
+      if retry_counter < max_retry
+        retry_counter += 1
+        sleep(0.5)
+        load_pictures(browser, all_pictures, retry_counter)
+        end
     end
     return pictures
   end
 
+  pictures_hashmap = {}
   duplicate_counter = 2
-  pictures_hashmap = nil
-  Async do
-    Playwright.create(playwright_cli_executable_path: './node_modules/.bin/playwright') do |playwright|
-      playwright.chromium.launch(headless: true) do |browser|
-        page = browser.new_page
-        page.goto(link)
-        page.evaluate('() => document.body.style.zoom = "1%"')
-        all_pictures = page.query_selector('//div[@data-testid="aviv.CDP.Gallery.MasonryModal.TopBar"]//div[contains(text(), "Bilder")]').inner_text.match(/^\d+/).to_s.to_i
-        pictures = load_pictures(page, all_pictures)
-        pictures_hashmap_temp = {}
-        pictures.each do |picture|
-          url = picture.query_selector('xpath=./source[last()]').get_attribute('srcset')
-          title = picture.query_selector('xpath=./img').get_attribute('aria-label')
-          if pictures_hashmap_temp.key?(title)
-            title = "#{title}_#{duplicate_counter}"
-            duplicate_counter += 1
-          end
-          pictures_hashmap_temp[title] = url
-        end
+  browser = Ferrum::Browser.new
 
-        browser.close
-
-        pictures_hashmap = pictures_hashmap_temp
-      end
+  browser.goto(link + '#masonry-modal')
+  browser.evaluate('document.body.style.zoom = "1%"')
+  all_pictures = browser.at_xpath('//div[@data-testid="aviv.CDP.Gallery.MasonryModal.TopBar"]//div[contains(text(), "Bilder")]')
+  if all_pictures
+    all_pictures = all_pictures.text.match(/^\d+/).to_s.to_i
+  else
+    # An exception; when there is less than 3 images
+    dom = get_dom(link)
+    pictures = dom.xpath('//div[@data-testid="aviv.CDP.Gallery.DesktopPreview"]//source').map { |picture| picture['srcset'] }
+    browser.quit
+    return pictures
+  end
+  pictures = load_pictures(browser, all_pictures)
+  pictures.each do |picture|
+    url = picture.at_xpath('./source[last()]')['srcset']
+    title = picture.at_xpath('./img').description['attributes']
+    title = title[title.index('aria-label') + 1]
+    if pictures_hashmap.key?(title)
+      title = "#{title}_#{duplicate_counter}"
+      duplicate_counter += 1
     end
+    pictures_hashmap[title] = url
   end
 
-  while !pictures_hashmap
-    sleep(0.5)
-  end
+  browser.quit
 
   return pictures_hashmap
 end

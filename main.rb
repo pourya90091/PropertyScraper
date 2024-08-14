@@ -2,6 +2,7 @@ require 'async'
 require 'httparty'
 require 'logging'
 require 'nokogiri'
+require 'playwright'
 
 class Property
   # Automatically create getter and setter methods for all attributes
@@ -61,7 +62,7 @@ class Property
   end
 end
 
-def main(city='landkreis-muenchen', page=nil, start_page=1, end_page=1)
+def main(city='landkreis-muenchen', page=nil, start_page=1, end_page=1, fetch_pic=true)
   page = !page ? start_page : page
 
   Async do |task|
@@ -69,17 +70,17 @@ def main(city='landkreis-muenchen', page=nil, start_page=1, end_page=1)
     url = "https://www.immowelt.de/suche/#{city}/immobilien/mk?sp=#{page}"
     dom = get_dom(url)
 
-    $links = dom.xpath('//div[contains(@class, "SearchList")]/div/a[@href]').map { |link| link['href'] }
+    $links = dom.xpath('//div[contains(@class, "SearchList")]/div/a[not(contains(@href, "projekte"))]').map { |link| link['href'] }
     $links.each do |link|
       task.async do
         begin
           if ad_exists(link)
             $logger.info "Fetching #{link}"
-            data = fetch(link)
+            data = fetch(link, fetch_pic)
             property = Property.new(*data, city, link)
           end
-        rescue
-          $logger.error "Error occurred during fetching #{link}"
+        rescue Exception => err
+          $logger.error "Error (#{link}): #{err}"
         end
       end
     end
@@ -92,12 +93,18 @@ def main(city='landkreis-muenchen', page=nil, start_page=1, end_page=1)
   main(city, page += 1)
 end
 
-def fetch(link)
+def fetch(link, fetch_pic)
   dom = get_dom(link)
 
   id = link.match(/.{7}$/).to_s
   brief = dom.xpath('normalize-space(//div[@data-testid="aviv.CDP.Sections.Hardfacts"]/div[1])')
-  pictures = dom.xpath('//div[@data-testid="aviv.CDP.Gallery.DesktopPreview"]//source').map { |picture| picture['srcset'] }
+  if fetch_pic
+    # A hashmap that contains all pictures (titles and urls)
+    pictures = fetch_pictures(link + '#masonry-modal')
+  else
+    # An Array that contains few pictures (without titles, only urls)
+    pictures = dom.xpath('//div[@data-testid="aviv.CDP.Gallery.DesktopPreview"]//source').map { |picture| picture['srcset'] }
+  end
   price = dom.xpath('//span[@data-testid="aviv.CDP.Sections.Hardfacts.Price.Value"]').text
   room = dom.xpath('//span[text()="Zimmer"]/preceding-sibling::span').text
   living_space = dom.xpath('//span[text()="Wohnfläche"]/preceding-sibling::span').text
@@ -171,6 +178,52 @@ def fetch(link)
   return [id, brief, pictures, price, room, living_space, property, projectile,
   availability, address, main_prices, additional_prices, further_price_information, features,
   descriptions, energy_and_building_condition, provider, ref_number]
+end
+
+def fetch_pictures(link)
+  def load_pictures(page, all_pictures)
+    pictures = page.query_selector_all('//picture[contains(@id, "picture")]')
+
+    if pictures.length < all_pictures
+      sleep(0.5)
+      load_pictures(page, all_pictures)
+    end
+    return pictures
+  end
+
+  duplicate_counter = 2
+  pictures_hashmap = nil
+  Async do
+    Playwright.create(playwright_cli_executable_path: './node_modules/.bin/playwright') do |playwright|
+      playwright.chromium.launch(headless: false) do |browser|
+        page = browser.new_page
+        page.goto(link)
+        page.evaluate('() => document.body.style.zoom = "1%"')
+        all_pictures = page.query_selector('//div[@data-testid="aviv.CDP.Gallery.MasonryModal.TopBar"]//div[contains(text(), "Bilder")]').inner_text.match(/^\d+/).to_s.to_i
+        pictures = load_pictures(page, all_pictures)
+        pictures_hashmap_temp = {}
+        pictures.each do |picture|
+          url = picture.query_selector('xpath=./source[last()]').get_attribute('srcset')
+          title = picture.query_selector('xpath=./img').get_attribute('aria-label')
+          if pictures_hashmap_temp.key?(title)
+            title = "#{title}_#{duplicate_counter}"
+            duplicate_counter += 1
+          end
+          pictures_hashmap_temp[title] = url
+        end
+
+        browser.close
+
+        pictures_hashmap = pictures_hashmap_temp
+      end
+    end
+  end
+
+  while !pictures_hashmap
+    sleep(0.5)
+  end
+
+  return pictures_hashmap
 end
 
 def get_dom(url)

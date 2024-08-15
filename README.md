@@ -46,7 +46,7 @@ details.
 ```ruby
 require_relative 'scraper'
 
-properties = crawl("berlin") # Fetches first page (approximately 20 properties)
+properties = crawl(city: "berlin") # Fetches first page (approximately 20 properties)
 properties.each do |property|
   puts property.data
 end

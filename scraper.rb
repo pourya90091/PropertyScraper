@@ -62,7 +62,8 @@ class Property
   end
 end
 
-def main(city='landkreis-muenchen', page=nil, start_page=1, end_page=1, fetch_pic=true)
+def crawl(city='landkreis-muenchen', start_page=1, end_page=1, fetch_pic=false, page=nil, properties=[])
+  set_logger()
   page = !page ? start_page : page
 
   $logger.info "Scraping #{city} begins (page #{page})"
@@ -77,7 +78,7 @@ def main(city='landkreis-muenchen', page=nil, start_page=1, end_page=1, fetch_pi
           $logger.info "Fetching #{link}"
           data = fetch(link, fetch_pic)
           property = Property.new(*data, city, link)
-          puts property.data
+          properties.push(property)
         end
       rescue Exception => err
         $logger.error "Error (#{link}): #{err}"
@@ -89,9 +90,9 @@ def main(city='landkreis-muenchen', page=nil, start_page=1, end_page=1, fetch_pi
   results = promises.map(&:value)
   if $links.length < 1 || page == end_page
     $logger.info "#{city} Scraped completely"
-    return 0
+    return properties
   end
-  main(city, page += 1)
+  crawl(city, start_page, end_page, fetch_pic, page += 1, properties)
 end
 
 def fetch(link, fetch_pic)
@@ -240,12 +241,17 @@ def ad_exists(url)
   return price.empty? ? false : true
 end
 
-if __FILE__ == $0
+def set_logger()
   $logger = Logging.logger['scraper_logger']
   $logger.level = :info
   $logger.add_appenders \
     Logging.appenders.stdout,
     Logging.appenders.file('logs.log')
+end
 
-  main()
+if __FILE__ == $0
+  properties = crawl()
+  properties.each do |property|
+    puts property.data
+  end
 end

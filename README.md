@@ -10,19 +10,17 @@ bundle install
 
 ### Usage
 
-#### main()
+#### crawl()
 - **city** (String) => Name of a city; Example: landkreis-muenchen.
 - **start_page** (Integer) => The page for start-point of Scraper (default=1).
 - **end_page** (Integer) => The page for stop-point of Scraper (default=1).
-- **fetch_pic** (Boolean) => If set `true`, the Scraper will fetch all available pictures (return as a Hash), otherwise (`false`) only fetches a few pictures (return as an Array).
-
->Note: There is also a `page` parameter that acts as a counter, so do not give it value.
+- **fetch_pic** (Boolean) => If set `true`, the Scraper will fetch all available pictures (return as a Hash), otherwise (`false`) only fetches a few pictures (return as an Array of urls).
 
 ### Output
 The scraped data will be saved as a Property class.
 
 #### Property class attributes
-- id (String) => ID of the ad ().
+- id (String) => ID of the ad.
 - brief (String) => Type of the property; Example: "WG-Zimmer zur Miete".
 - pictures (Array or Hash) => Pictures.
 - price (String) => Price; Example: "750 €".
@@ -43,3 +41,22 @@ details.
 - city (String) => City.
 - url (String) => URL of the ad.
 - ref_number (String) => Reference number of the ad.
+
+### Example
+```ruby
+require_relative 'scraper'
+
+properties = crawl("berlin") # Fetches first page (approximately 20 properties)
+properties.each do |property|
+  puts property.data
+end
+```
+## Tips
+
+>**Tip** : To obtain `city` value (crawl function parameter), go to https://www.immowelt.de/suche/immobilien and in the "Wo suchst du?" input enter name of a city, zip code or district (like "Berlin"), then select one of the results and push "Jetzt finden" button, then you shuld be at a url like this:
+https://www.immowelt.de/suche/berlin/immobilien; select anything between `suche/` and `/immobilien`, which in this case is `berlin`. You now have the `city` value.
+
+>**Tip** : You can get all of Property attributes as a Hashmap using `Property.data()`.
+
+>**Tip** : There is also a `page` parameter (crawl function) that acts as a counter, so do not give it value.
+---

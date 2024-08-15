@@ -200,15 +200,16 @@ def fetch_pictures(link)
 
   browser.goto(link + '#masonry-modal')
   browser.evaluate('document.body.style.zoom = "1%"')
-  all_pictures = browser.at_xpath('//div[@data-testid="aviv.CDP.Gallery.MasonryModal.TopBar"]//div[contains(text(), "Bilder")]')
-  if all_pictures
-    all_pictures = all_pictures.text.match(/^\d+/).to_s.to_i
-  else
-    # An exception; when there is less than 3 images
+  begin
+    all_pictures = browser.at_xpath('//div[@data-testid="aviv.CDP.Gallery.MasonryModal.TopBar"]//div[contains(text(), "Bilder")]')
+  rescue
+    # An exception; when there is less than 3 images (or any other errors while fetching all_pictures variable)
     dom = get_dom(link)
     pictures = dom.xpath('//div[@data-testid="aviv.CDP.Gallery.DesktopPreview"]//source').map { |picture| picture['srcset'] }
     browser.quit
     return pictures
+  else
+    all_pictures = all_pictures.text.match(/^\d+/).to_s.to_i
   end
   pictures = load_pictures(browser, all_pictures)
   pictures.each do |picture|

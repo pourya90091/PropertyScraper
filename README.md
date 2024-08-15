@@ -42,7 +42,7 @@ details.
 - url (String) => URL of the ad.
 - ref_number (String) => Reference number of the ad.
 
-### Example
+### Code Example
 ```ruby
 require_relative 'scraper'
 
@@ -58,5 +58,5 @@ https://www.immowelt.de/suche/berlin/immobilien; select anything between `suche/
 
 >**Tip** : You can get all of Property attributes as a Hashmap using `Property.data()`.
 
->**Tip** : There are also two other parameters in crawl function (`page`, `properties`) that you don't need give value to them.
+>**Tip** : There are also two other parameters in crawl function (`page`, `properties`) that you don't need give them value.
 ---

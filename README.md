@@ -58,5 +58,5 @@ https://www.immowelt.de/suche/berlin/immobilien; select anything between `suche/
 
 >**Tip** : You can get all of Property attributes as a Hashmap using `Property.data()`.
 
->**Tip** : There is also a `page` parameter (crawl function) that acts as a counter, so do not give it value.
+>**Tip** : There are also two other parameters in crawl function (`page`, `properties`) that you don't need give value to them.
 ---

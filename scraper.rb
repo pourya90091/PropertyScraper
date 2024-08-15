@@ -62,7 +62,7 @@ class Property
   end
 end
 
-def crawl(city='landkreis-muenchen', start_page=1, end_page=1, fetch_pic=false, page=nil, properties=[])
+def crawl(city: 'landkreis-muenchen', start_page: 1, end_page: 1, fetch_pic: false, page: nil, properties: [])
   set_logger()
   page = !page ? start_page : page
 
@@ -92,7 +92,7 @@ def crawl(city='landkreis-muenchen', start_page=1, end_page=1, fetch_pic=false, 
     $logger.info "#{city} Scraped completely"
     return properties
   end
-  crawl(city, start_page, end_page, fetch_pic, page += 1, properties)
+  crawl(city: city, start_page: start_page, end_page: end_page, fetch_pic: fetch_pic, page: page + 1, properties: properties)
 end
 
 def fetch(link, fetch_pic)

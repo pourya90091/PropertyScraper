@@ -3,64 +3,7 @@ require 'httparty'
 require 'logging'
 require 'nokogiri'
 require 'ferrum'
-
-class Property
-  # Automatically create getter and setter methods for all attributes
-  attr_accessor :id, :brief, :pictures, :price, :room, :living_space, :property, :projectile,
-                :availability, :address, :main_prices, :additional_prices, :further_price_information, :features,
-                :descriptions, :energy_and_building_condition, :provider, :ref_number, :city, :url
-
-  # Constructor to initialize the object with the provided attributes
-  def initialize(id, brief, pictures, price, room, living_space, property, projectile,
-                 availability, address, main_prices, additional_prices, further_price_information, features,
-                 descriptions, energy_and_building_condition, provider, ref_number, city, url)
-    @id = id
-    @brief = brief
-    @pictures = pictures
-    @price = price
-    @room = room
-    @living_space = living_space
-    @property = property
-    @projectile = projectile
-    @availability = availability
-    @address = address
-    @main_prices = main_prices
-    @additional_prices = additional_prices
-    @further_price_information = further_price_information
-    @features = features
-    @descriptions = descriptions
-    @energy_and_building_condition = energy_and_building_condition
-    @provider = provider
-    @city = city
-    @url = url
-    @ref_number = ref_number
-  end
-
-  def data
-    return {
-      'id' => @id,
-      'brief' => @brief,
-      'pictures' => @pictures,
-      'price' => @price,
-      'room' => @room,
-      'living_space' => @living_space,
-      'property' => @property,
-      'projectile' => @projectile,
-      'availability' => @availability,
-      'address' => @address,
-      'main_prices' => @main_prices,
-      'additional_prices' => @additional_prices,
-      'further_price_information' => @further_price_information,
-      'features' => @features,
-      'descriptions' => @descriptions,
-      'energy_and_building_condition' => @energy_and_building_condition,
-      'provider' => @provider,
-      'city' => @city,
-      'url' => @url,
-      'ref_number' => @ref_number
-    }
-  end
-end
+require_relative 'property'
 
 def crawl(city: 'landkreis-muenchen', start_page: 1, end_page: 1, fetch_pic: false, timeout: 5, max_retry: 5, page: nil, properties: [])
   set_logger()
@@ -73,6 +16,7 @@ def crawl(city: 'landkreis-muenchen', start_page: 1, end_page: 1, fetch_pic: fal
   dom = get_dom(url)
 
   $links = dom.xpath('//div[contains(@class, "SearchList")]/div/a[not(contains(@href, "projekte"))]').map { |link| link['href'] }
+  $logger.info "#{$links.length} ad(s) found (page #{page})"
   promises = $links.map do |link|
     Concurrent::Promise.execute do
       begin
@@ -81,6 +25,9 @@ def crawl(city: 'landkreis-muenchen', start_page: 1, end_page: 1, fetch_pic: fal
           data = fetch(link, fetch_pic)
           property = Property.new(*data, city, link)
           properties.push(property)
+          $logger.info "Fetched #{link}"
+        else
+          $logger.info "Not available ad (#{link})"
         end
       rescue Exception => err
         $logger.error "Error (#{link}): #{err}"
@@ -220,7 +167,8 @@ def fetch_pictures(link)
   if element_exists
     all_pictures = browser.at_xpath(all_pictures_xpath).text.match(/^\d+/).to_s.to_i
   else
-    # An exception; When there is less than 3 images
+    # An exception; When there is less than 4 pictures
+    $logger.info "Can't fetch all available pictures (#{link})"
     dom = get_dom(link)
     pictures = dom.xpath('//div[@data-testid="aviv.CDP.Gallery.DesktopPreview"]//source').map { |picture| picture['srcset'] }
     browser.quit

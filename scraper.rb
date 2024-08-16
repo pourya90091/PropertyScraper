@@ -62,7 +62,7 @@ class Property
   end
 end
 
-def crawl(city: 'landkreis-muenchen', start_page: 1, end_page: 1, fetch_pic: false, page: nil, properties: [])
+def crawl(city: 'landkreis-muenchen', start_page: 1, end_page: 1, fetch_pic: false, timeout: 5, page: nil, properties: [])
   set_logger()
   page = !page ? start_page : page
 
@@ -76,7 +76,7 @@ def crawl(city: 'landkreis-muenchen', start_page: 1, end_page: 1, fetch_pic: fal
       begin
         if ad_exists(link)
           $logger.info "Fetching #{link}"
-          data = fetch(link, fetch_pic)
+          data = fetch(link, fetch_pic, timeout)
           property = Property.new(*data, city, link)
           properties.push(property)
         end
@@ -92,17 +92,17 @@ def crawl(city: 'landkreis-muenchen', start_page: 1, end_page: 1, fetch_pic: fal
     $logger.info "#{city} Scraped completely"
     return properties
   end
-  crawl(city: city, start_page: start_page, end_page: end_page, fetch_pic: fetch_pic, page: page + 1, properties: properties)
+  crawl(city: city, start_page: start_page, end_page: end_page, fetch_pic: fetch_pic, timeout: timeout, page: page + 1, properties: properties)
 end
 
-def fetch(link, fetch_pic)
+def fetch(link, fetch_pic, timeout)
   dom = get_dom(link)
 
   id = link.match(/.{7}$/).to_s
   brief = dom.xpath('normalize-space(//div[@data-testid="aviv.CDP.Sections.Hardfacts"]/div[1])')
   if fetch_pic
     # A hashmap that contains all pictures (titles and urls)
-    pictures = fetch_pictures(link)
+    pictures = fetch_pictures(link, timeout)
   else
     # An Array that contains few pictures (without titles, only urls)
     pictures = dom.xpath('//div[@data-testid="aviv.CDP.Gallery.DesktopPreview"]//source').map { |picture| picture['srcset'] }
@@ -182,7 +182,7 @@ def fetch(link, fetch_pic)
   descriptions, energy_and_building_condition, provider, ref_number]
 end
 
-def fetch_pictures(link)
+def fetch_pictures(link, timeout)
   def load_pictures(browser, all_pictures, retry_counter=1, max_retry=5)
     pictures = browser.xpath('//picture[contains(@id, "picture")]')
     if pictures.length < all_pictures
@@ -197,21 +197,30 @@ def fetch_pictures(link)
 
   pictures_hashmap = {}
   duplicate_counter = 2
-  browser = Ferrum::Browser.new
+  browser = Ferrum::Browser.new(timeout: timeout)
 
-  browser.goto(link + '#masonry-modal')
-  browser.evaluate('document.body.style.zoom = "1%"')
   begin
-    all_pictures = browser.at_xpath('//div[@data-testid="aviv.CDP.Gallery.MasonryModal.TopBar"]//div[contains(text(), "Bilder")]')
+    browser.go_to(link + '#masonry-modal')
   rescue
-    # An exception; when there is less than 3 images (or any other errors while fetching all_pictures variable)
+    # Wait and retry
+    sleep(timeout)
+    retry
+  end
+    browser.evaluate('document.body.style.zoom = "1%"')
+
+  # Getting number of all available pictures
+  all_pictures_xpath = '//div[@data-testid="aviv.CDP.Gallery.MasonryModal.TopBar"]//div[contains(text(), "Bilder")]'
+  element_exists = wait_for(all_pictures_xpath, browser, timeout)
+  if element_exists
+    all_pictures = browser.at_xpath(all_pictures_xpath).text.match(/^\d+/).to_s.to_i
+  else
+    # An exception; When there is less than 3 images
     dom = get_dom(link)
     pictures = dom.xpath('//div[@data-testid="aviv.CDP.Gallery.DesktopPreview"]//source').map { |picture| picture['srcset'] }
     browser.quit
     return pictures
-  else
-    all_pictures = all_pictures.text.match(/^\d+/).to_s.to_i
   end
+
   pictures = load_pictures(browser, all_pictures)
   pictures.each do |picture|
     url = picture.at_xpath('./source[last()]')['srcset']
@@ -239,6 +248,23 @@ def ad_exists(url)
   dom = get_dom(url)
   price = dom.xpath('//span[@data-testid="aviv.CDP.Sections.Hardfacts.Price.Value"]')
   return price.empty? ? false : true
+end
+
+def wait_for(xpath, browser, timeout)
+  start_time = Time.now
+  begin
+    if (Time.now - start_time) > timeout
+      return false
+    end
+    if browser.at_xpath(xpath).nil?
+      raise "Error"
+    end
+  rescue
+    sleep(0.1)
+    retry
+  else
+    return true
+  end
 end
 
 def set_logger()

@@ -16,6 +16,7 @@ bundle install
 - **end_page** (Integer) => The page for stop-point of Scraper (default=1).
 - **fetch_pic** (Boolean) => If set `true`, the Scraper will fetch all available pictures (return as a Hash), otherwise (`false`) only fetches a few pictures (return as an Array of urls).
 - **timeout** (Integer) => Timeout value to use while fetching all available pictures (default=5).
+- **max_retry** (Integer) => Max retry value to use while fetching all available pictures (default=3).
 
 ### Output
 The scraped data will be saved as a Property class.

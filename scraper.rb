@@ -62,8 +62,10 @@ class Property
   end
 end
 
-def crawl(city: 'landkreis-muenchen', start_page: 1, end_page: 1, fetch_pic: false, timeout: 5, page: nil, properties: [])
+def crawl(city: 'landkreis-muenchen', start_page: 1, end_page: 1, fetch_pic: false, timeout: 5, max_retry: 5, page: nil, properties: [])
   set_logger()
+  $timeout = timeout
+  $max_retry = max_retry
   page = !page ? start_page : page
 
   $logger.info "Scraping #{city} begins (page #{page})"
@@ -76,7 +78,7 @@ def crawl(city: 'landkreis-muenchen', start_page: 1, end_page: 1, fetch_pic: fal
       begin
         if ad_exists(link)
           $logger.info "Fetching #{link}"
-          data = fetch(link, fetch_pic, timeout)
+          data = fetch(link, fetch_pic)
           property = Property.new(*data, city, link)
           properties.push(property)
         end
@@ -92,17 +94,17 @@ def crawl(city: 'landkreis-muenchen', start_page: 1, end_page: 1, fetch_pic: fal
     $logger.info "#{city} Scraped completely"
     return properties
   end
-  crawl(city: city, start_page: start_page, end_page: end_page, fetch_pic: fetch_pic, timeout: timeout, page: page + 1, properties: properties)
+  crawl(city: city, start_page: start_page, end_page: end_page, fetch_pic: fetch_pic, timeout: timeout, max_retry: max_retry, page: page + 1, properties: properties)
 end
 
-def fetch(link, fetch_pic, timeout)
+def fetch(link, fetch_pic)
   dom = get_dom(link)
 
   id = link.match(/.{7}$/).to_s
   brief = dom.xpath('normalize-space(//div[@data-testid="aviv.CDP.Sections.Hardfacts"]/div[1])')
   if fetch_pic
     # A hashmap that contains all pictures (titles and urls)
-    pictures = fetch_pictures(link, timeout)
+    pictures = fetch_pictures(link)
   else
     # An Array that contains few pictures (without titles, only urls)
     pictures = dom.xpath('//div[@data-testid="aviv.CDP.Gallery.DesktopPreview"]//source').map { |picture| picture['srcset'] }
@@ -182,13 +184,13 @@ def fetch(link, fetch_pic, timeout)
   descriptions, energy_and_building_condition, provider, ref_number]
 end
 
-def fetch_pictures(link, timeout)
-  def load_pictures(browser, all_pictures, retry_counter=1, max_retry=5)
+def fetch_pictures(link)
+  def load_pictures(browser, all_pictures, retry_counter=1)
     pictures = browser.xpath('//picture[contains(@id, "picture")]')
     if pictures.length < all_pictures
-      if retry_counter < max_retry
+      if retry_counter < $max_retry
         retry_counter += 1
-        sleep(0.5)
+        sleep($timeout)
         load_pictures(browser, all_pictures, retry_counter)
         end
     end
@@ -197,20 +199,24 @@ def fetch_pictures(link, timeout)
 
   pictures_hashmap = {}
   duplicate_counter = 2
-  browser = Ferrum::Browser.new(timeout: timeout)
+  retry_counter = 1
+  browser = Ferrum::Browser.new(timeout: $timeout)
 
   begin
     browser.go_to(link + '#masonry-modal')
   rescue
     # Wait and retry
-    sleep(timeout)
-    retry
+    sleep(0.5)
+    if retry_counter < $max_retry
+      retry_counter += 1
+      retry
+    end
   end
-    browser.evaluate('document.body.style.zoom = "1%"')
+  browser.evaluate('document.body.style.zoom = "1%"')
 
   # Getting number of all available pictures
   all_pictures_xpath = '//div[@data-testid="aviv.CDP.Gallery.MasonryModal.TopBar"]//div[contains(text(), "Bilder")]'
-  element_exists = wait_for(all_pictures_xpath, browser, timeout)
+  element_exists = wait_for(all_pictures_xpath, browser)
   if element_exists
     all_pictures = browser.at_xpath(all_pictures_xpath).text.match(/^\d+/).to_s.to_i
   else
@@ -250,10 +256,10 @@ def ad_exists(url)
   return price.empty? ? false : true
 end
 
-def wait_for(xpath, browser, timeout)
+def wait_for(xpath, browser)
   start_time = Time.now
   begin
-    if (Time.now - start_time) > timeout
+    if (Time.now - start_time) > $timeout
       return false
     end
     if browser.at_xpath(xpath).nil?

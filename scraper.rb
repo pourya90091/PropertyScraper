@@ -45,6 +45,8 @@ def crawl(city: 'landkreis-muenchen', start_page: 1, end_page: 1, fetch_pic: fal
 end
 
 def fetch(link, fetch_pic)
+  remove_currency_symbol = ->(price) { return price =~ /€$/ ? price.sub!(/€$/, '').strip : price }
+
   dom = get_dom(link)
 
   id = link.match(/.{7}$/).to_s
@@ -57,6 +59,7 @@ def fetch(link, fetch_pic)
     pictures = dom.xpath('//div[@data-testid="aviv.CDP.Gallery.DesktopPreview"]//source').map { |picture| picture['srcset'] }
   end
   price = dom.xpath('//span[@data-testid="aviv.CDP.Sections.Hardfacts.Price.Value"]').text
+  price = price =~ /\u00A0€$/ ? price.sub!(/\u00A0€$/, '') : price # &nbsp; => U+00A0
   room = dom.xpath('//span[text()="Zimmer"]/preceding-sibling::span').text
   living_space = dom.xpath('//span[text()="Wohnfläche"]/preceding-sibling::span').text
   property = dom.xpath('//span[text()="Grundstück"]/preceding-sibling::span').text
@@ -68,9 +71,9 @@ def fetch(link, fetch_pic)
   all_prices = dom.xpath('//div[@data-testid="aviv.CDP.Sections.Price.MainPrice"]/div[not(@data-testid)]')
   all_prices.each do |price|
     if all_prices.find_index(price) == 0
-      main_prices[price.xpath('./div[1]/div[1]').text] = price.xpath('./div[2]/span[1]').text
+      main_prices[price.xpath('./div[1]/div[1]').text] = remove_currency_symbol.call(price.xpath('./div[2]/span[1]').text)
     else
-      main_prices[price.xpath('./div/div[1]/div[1]').text] = price.xpath('./div/div[2]/span').text
+      main_prices[price.xpath('./div/div[1]/div[1]').text] = remove_currency_symbol.call(price.xpath('./div/div[2]/span').text)
     end
   end
 
@@ -83,9 +86,9 @@ def fetch(link, fetch_pic)
   all_prices = dom.xpath('//div[@data-testid="aviv.CDP.Sections.Price.AdditionalPrice"]/div')
   all_prices.each do |price|
     if price['class'] == 'css-1fobf8d'
-      additional_prices[price.xpath('./descendant::div[text()][2]').text] = price.xpath('./descendant::span[1]').text
+      additional_prices[price.xpath('./descendant::div[text()][2]').text] = remove_currency_symbol.call(price.xpath('./descendant::span[1]').text)
     else
-      additional_prices[price.xpath('normalize-space(./div[1])')] = price.xpath('normalize-space(./div[2])')
+      additional_prices[price.xpath('normalize-space(./div[1])')] = remove_currency_symbol.call(price.xpath('normalize-space(./div[2])'))
     end
   end
 
